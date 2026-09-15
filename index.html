@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1017;
+    --panel:#171A24;
+    --panel-2:#1E2230;
+    --ink:#EDEFF5;
+    --muted:#9AA2B8;
+    --faint:#646C82;
+    --line:#272C3B;
+    --accent:#6C7BFF;
+    --green:#2FD48F;
+    --amber:#FFB547;
+    --red:#FF5C7A;
+    --pink:#E879F9;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 14px 40px rgba(0,0,0,.22);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    font-family:"Inter",system-ui,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.5;
+    padding:36px 24px 64px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1160px;margin:0 auto}
+  .mono{font-family:"IBM Plex Mono",monospace}
+
+  /* ---- header ---- */
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:26px}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  h1{font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .io{display:flex;gap:8px}
+
+  /* ---- layout ---- */
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:20px;box-shadow:var(--shadow);min-width:0;
+  }
+  .c-deadline{grid-column:span 7}
+  .c-jobs{grid-column:span 5}
+  .c-subs{grid-column:span 7}
+  .c-pomo{grid-column:span 5}
+  .c-debts{grid-column:span 12}
+  @media(max-width:900px){
+    .c-deadline,.c-jobs,.c-subs,.c-pomo,.c-debts{grid-column:span 12}
+    body{padding:24px 14px 48px}
+  }
+
+  .card h2{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;
+  }
+  .card h2 .total{color:var(--ink);font-size:13px;letter-spacing:.04em}
+
+  /* ---- controls ---- */
+  input,select,button{font-family:inherit;font-size:14px;color:var(--ink)}
+  input,select{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    padding:9px 11px;outline:none;min-width:0;width:100%;
+  }
+  input:focus,select:focus{border-color:var(--accent)}
+  input::placeholder{color:var(--faint)}
+  input[type=date]{color-scheme:dark}
+  button{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    padding:9px 14px;cursor:pointer;font-weight:500;transition:.14s;white-space:nowrap;
+  }
+  button:hover{border-color:var(--accent);color:#fff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{filter:brightness(1.12)}
+  button.ghost{background:none;border:none;color:var(--faint);padding:4px 6px;font-size:16px;line-height:1}
+  button.ghost:hover{color:var(--red)}
+  .row-form{display:flex;gap:8px;margin-top:14px}
+  .row-form input{flex:1}
+
+  /* ---- lists ---- */
+  .list{display:flex;flex-direction:column;gap:2px}
+  .item{
+    display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:10px;
+    transition:background .14s;
+  }
+  .item:hover{background:var(--panel-2)}
+  .item .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+  .item .meta{font-size:12px;color:var(--muted);font-family:"IBM Plex Mono",monospace;white-space:nowrap}
+  .item .amt{font-family:"IBM Plex Mono",monospace;font-weight:600;white-space:nowrap}
+  .empty{color:var(--faint);font-size:13px;padding:14px 10px;text-align:center}
+  .pill{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.06em;
+    padding:3px 8px;border-radius:99px;background:var(--panel-2);color:var(--muted);
+    border:1px solid var(--line);white-space:nowrap;
+  }
+  .pill.soon{background:rgba(255,181,71,.12);color:var(--amber);border-color:rgba(255,181,71,.3)}
+  .pill.now{background:rgba(255,92,122,.12);color:var(--red);border-color:rgba(255,92,122,.3)}
+
+  /* ---- deadline ---- */
+  .dl-big{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .dl-num{font-family:"IBM Plex Mono",monospace;font-size:64px;font-weight:600;line-height:1;letter-spacing:-.03em}
+  .dl-unit{font-size:15px;color:var(--muted)}
+  .dl-sub{font-size:13px;color:var(--muted);margin-top:10px}
+  .bar{height:6px;background:var(--panel-2);border-radius:99px;overflow:hidden;margin-top:16px}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--pink));border-radius:99px;transition:width .4s}
+
+  /* ---- jobs ---- */
+  .tap{
+    width:100%;padding:18px;font-size:15px;font-weight:600;border-radius:13px;
+    background:linear-gradient(135deg,var(--accent),#8B6CFF);border:none;color:#fff;
+    letter-spacing:.01em;box-shadow:0 8px 24px rgba(108,123,255,.28);
+  }
+  .tap:hover{filter:brightness(1.1)}
+  .tap:active{transform:scale(.985)}
+  .stats{display:flex;gap:10px;margin:16px 0 4px}
+  .stat{flex:1;background:var(--panel-2);border-radius:11px;padding:11px 12px;text-align:center}
+  .stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;line-height:1.2}
+  .stat span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-family:"IBM Plex Mono",monospace}
+  .spark{display:flex;align-items:flex-end;gap:3px;height:34px;margin-top:14px}
+  .spark div{flex:1;background:var(--panel-2);border-radius:3px;min-height:3px;position:relative}
+  .spark div.has{background:var(--accent)}
+  .undo{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--faint)}
+
+  /* ---- pomodoro ---- */
+  .pomo-face{text-align:center;padding:6px 0 2px}
+  .clock{font-family:"IBM Plex Mono",monospace;font-size:62px;font-weight:600;letter-spacing:-.02em;line-height:1.05}
+  .clock.rest{color:var(--green)}
+  .modes{display:flex;gap:6px;justify-content:center;margin:14px 0}
+  .modes button{padding:7px 13px;font-size:12px;border-radius:99px}
+  .modes button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pomo-ctl{display:flex;gap:8px;margin-top:6px}
+  .pomo-ctl button{flex:1;padding:11px}
+
+  /* ---- debts ---- */
+  .pay{display:flex;gap:6px;align-items:center}
+  .pay input{width:84px;padding:6px 8px;font-size:12px;font-family:"IBM Plex Mono",monospace}
+  .pay button{padding:6px 10px;font-size:12px}
+  .mini-bar{height:4px;background:var(--panel-2);border-radius:99px;overflow:hidden;width:70px}
+  .mini-bar > i{display:block;height:100%;background:var(--green)}
+  .settled .name,.settled .amt{color:var(--faint);text-decoration:line-through}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow">Personal Ops</div>
+      <h1>Control Panel</h1>
+    </div>
+    <div class="io">
+      <button id="exportBtn">Export</button>
+      <button id="importBtn">Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- DEADLINE -->
+    <section class="card c-deadline">
+      <h2>Job Deadline <span class="total mono" id="dlDate">—</span></h2>
+      <div class="dl-big">
+        <span class="dl-num" id="dlNum">—</span>
+        <span class="dl-unit" id="dlUnit">set a target date below</span>
+      </div>
+      <div class="bar"><i id="dlBar" style="width:0%"></i></div>
+      <div class="dl-sub" id="dlSub"></div>
+      <div class="row-form">
+        <input type="date" id="dlInput">
+        <button class="primary" id="dlSet">Set</button>
+      </div>
+    </section>
+
+    <!-- JOB APPLICATIONS -->
+    <section class="card c-jobs">
+      <h2>Applications <span class="total mono" id="appTotal">0 total</span></h2>
+      <button class="tap" id="appLog">+ 1 Application Sent</button>
+      <div class="stats">
+        <div class="stat"><b id="appToday">0</b><span>Today</span></div>
+        <div class="stat"><b id="appWeek">0</b><span>7 days</span></div>
+        <div class="stat"><b id="appAvg">0</b><span>Per day</span></div>
+      </div>
+      <div class="spark" id="appSpark"></div>
+      <div class="undo">
+        <span id="appLast">no applications logged yet</span>
+        <button class="ghost" id="appUndo" style="font-size:12px">undo</button>
+      </div>
+    </section>
+
+    <!-- SUBSCRIPTIONS -->
+    <section class="card c-subs">
+      <h2>Subscriptions <span class="total" id="subTotal">$0.00 / mo</span></h2>
+      <div class="list" id="subList"></div>
+      <div class="row-form">
+        <input id="subName" placeholder="Netflix" style="flex:2">
+        <input id="subAmt" type="number" step="0.01" min="0" placeholder="15.99" style="flex:1">
+        <input id="subDay" type="number" min="1" max="31" placeholder="day" style="flex:.8">
+        <button class="primary" id="subAdd">Add</button>
+      </div>
+    </section>
+
+    <!-- POMODORO -->
+    <section class="card c-pomo">
+      <h2>Pomodoro <span class="total mono" id="pomoDone">0 done today</span></h2>
+      <div class="pomo-face">
+        <div class="clock" id="clock">25:00</div>
+      </div>
+      <div class="modes">
+        <button data-mode="work" class="on">Focus 25</button>
+        <button data-mode="short">Break 5</button>
+        <button data-mode="long">Long 15</button>
+      </div>
+      <div class="pomo-ctl">
+        <button class="primary" id="pomoToggle">Start</button>
+        <button id="pomoReset">Reset</button>
+      </div>
+    </section>
+
+    <!-- DEBTS -->
+    <section class="card c-debts">
+      <h2>Money I Owe <span class="total" id="debtTotal">$0.00 outstanding</span></h2>
+      <div class="list" id="debtList"></div>
+      <div class="row-form">
+        <input id="debtWho" placeholder="Who you owe" style="flex:2">
+        <input id="debtAmt" type="number" step="0.01" min="0" placeholder="250.00" style="flex:1">
+        <input id="debtNote" placeholder="what for (optional)" style="flex:2">
+        <button class="primary" id="debtAdd">Add</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* ============================ storage ============================ */
+const KEY = 'controlpanel.v1';
+const blank = { subs: [], debts: [], deadline: null, deadlineSetAt: null, apps: [], pomos: [] };
+let db;
+try { db = Object.assign({}, blank, JSON.parse(localStorage.getItem(KEY) || '{}')); }
+catch (e) { db = Object.assign({}, blank); }
+const save = () => localStorage.setItem(KEY, JSON.stringify(db));
+const uid  = () => Math.random().toString(36).slice(2, 9);
+
+/* ============================ helpers ============================ */
+const $ = s => document.querySelector(s);
+const money = n => '$' + Number(n || 0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+const DAY = 86400000;
+const midnight = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const dayKey = d => midnight(d).toDateString();
+
+// Last day of a given month, so "the 31st" still works in February.
+function clampDay(year, month, day){
+  const last = new Date(year, month + 1, 0).getDate();
+  return new Date(year, month, Math.min(day, last));
+}
+// Next occurrence of a monthly billing day, today counts as due.
+function nextDue(day){
+  const today = midnight(new Date());
+  let d = clampDay(today.getFullYear(), today.getMonth(), day);
+  if (d < today) d = clampDay(today.getFullYear(), today.getMonth() + 1, day);
+  return d;
+}
+const daysBetween = (a, b) => Math.round((midnight(b) - midnight(a)) / DAY);
+const fmtDate = d => d.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+const ord = n => n + (['th','st','nd','rd'][(n % 100 - 20) % 10] || ['th','st','nd','rd'][n % 100] || 'th');
+
+/* ============================ deadline ============================ */
+function renderDeadline(){
+  if (!db.deadline){
+    $('#dlNum').textContent = '—';
+    $('#dlUnit').textContent = 'set a target date below';
+    $('#dlDate').textContent = '—';
+    $('#dlSub').textContent = '';
+    $('#dlBar').style.width = '0%';
+    return;
+  }
+  const target = midnight(new Date(db.deadline + 'T00:00:00'));
+  const left = daysBetween(new Date(), target);
+  $('#dlDate').textContent = target.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+  $('#dlInput').value = db.deadline;
+  $('#dlNum').textContent = Math.abs(left);
+  $('#dlNum').style.color = left < 0 ? 'var(--red)' : left <= 14 ? 'var(--amber)' : 'var(--ink)';
+  $('#dlUnit').textContent = left < 0
+    ? (Math.abs(left) === 1 ? 'day past deadline' : 'days past deadline')
+    : left === 0 ? 'today is the day' : (left === 1 ? 'day to go' : 'days to go');
+
+  const start = db.deadlineSetAt ? midnight(new Date(db.deadlineSetAt)) : target;
+  const span = Math.max(1, daysBetween(start, target));
+  const gone = Math.min(span, Math.max(0, daysBetween(start, new Date())));
+  $('#dlBar').style.width = Math.round(gone / span * 100) + '%';
+
+  const weeks = Math.max(0, Math.floor(left / 7));
+  const apps = db.apps.length;
+  $('#dlSub').textContent = left > 0
+    ? `${weeks} full week${weeks === 1 ? '' : 's'} left · ${apps} application${apps === 1 ? '' : 's'} in so far`
+    : `${apps} application${apps === 1 ? '' : 's'} logged`;
+}
+$('#dlSet').onclick = () => {
+  const v = $('#dlInput').value;
+  if (!v) return;
+  if (db.deadline !== v){ db.deadline = v; db.deadlineSetAt = new Date().toISOString(); }
+  save(); renderDeadline();
+};
+
+/* ============================ applications ============================ */
+function renderApps(){
+  const now = new Date();
+  const today = db.apps.filter(t => dayKey(t) === dayKey(now)).length;
+  const week  = db.apps.filter(t => new Date(t) >= new Date(Date.now() - 7 * DAY)).length;
+  $('#appTotal').textContent = db.apps.length + ' total';
+  $('#appToday').textContent = today;
+  $('#appWeek').textContent  = week;
+  $('#appAvg').textContent   = (week / 7).toFixed(1);
+
+  // 14-day sparkline, oldest on the left
+  const counts = [];
+  for (let i = 13; i >= 0; i--){
+    const d = new Date(Date.now() - i * DAY);
+    counts.push(db.apps.filter(t => dayKey(t) === dayKey(d)).length);
+  }
+  const max = Math.max(1, ...counts);
+  $('#appSpark').innerHTML = counts.map((c, i) => {
+    const d = new Date(Date.now() - (13 - i) * DAY);
+    return `<div class="${c ? 'has' : ''}" style="height:${c ? Math.max(12, c / max * 100) : 8}%" title="${fmtDate(d)}: ${c}"></div>`;
+  }).join('');
+
+  const last = db.apps[db.apps.length - 1];
+  $('#appLast').textContent = last
+    ? 'last: ' + new Date(last).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})
+    : 'no applications logged yet';
+  $('#appUndo').style.visibility = last ? 'visible' : 'hidden';
+}
+$('#appLog').onclick = () => {
+  db.apps.push(new Date().toISOString());
+  save(); renderApps(); renderDeadline();
+  const b = $('#appLog'), old = b.textContent;
+  b.textContent = '✓ Logged — ' + db.apps.length + ' total';
+  setTimeout(() => b.textContent = old, 1100);
+};
+$('#appUndo').onclick = () => { db.apps.pop(); save(); renderApps(); renderDeadline(); };
+
+/* ============================ subscriptions ============================ */
+function renderSubs(){
+  const list = $('#subList');
+  const sorted = [...db.subs].sort((a, b) => nextDue(a.day) - nextDue(b.day));
+  $('#subTotal').textContent = money(db.subs.reduce((s, x) => s + Number(x.amount), 0)) + ' / mo';
+
+  if (!sorted.length){ list.innerHTML = '<div class="empty">No subscriptions yet — add one below.</div>'; return; }
+  list.innerHTML = sorted.map(s => {
+    const due = nextDue(s.day);
+    const n = daysBetween(new Date(), due);
+    const cls = n === 0 ? 'now' : n <= 3 ? 'soon' : '';
+    const label = n === 0 ? 'due today' : n === 1 ? 'tomorrow' : `in ${n}d`;
+    return `<div class="item">
+      <span class="name">${esc(s.name)}</span>
+      <span class="meta">${ord(s.day)} · ${fmtDate(due)}</span>
+      <span class="pill ${cls}">${label}</span>
+      <span class="amt">${money(s.amount)}</span>
+      <button class="ghost" data-del-sub="${s.id}" title="Remove">&times;</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-del-sub]').forEach(b => b.onclick = () => {
+    db.subs = db.subs.filter(x => x.id !== b.dataset.delSub);
+    save(); renderSubs();
+  });
+}
+$('#subAdd').onclick = () => {
+  const name = $('#subName').value.trim();
+  const amount = parseFloat($('#subAmt').value);
+  const day = parseInt($('#subDay').value, 10);
+  if (!name || !(amount >= 0) || !(day >= 1 && day <= 31)) return;
+  db.subs.push({ id: uid(), name, amount, day });
+  save(); renderSubs();
+  $('#subName').value = $('#subAmt').value = $('#subDay').value = '';
+  $('#subName').focus();
+};
+
+/* ============================ debts ============================ */
+function renderDebts(){
+  const list = $('#debtList');
+  const outstanding = db.debts.reduce((s, d) => s + Math.max(0, d.amount - d.paid), 0);
+  $('#debtTotal').textContent = money(outstanding) + ' outstanding';
+
+  if (!db.debts.length){ list.innerHTML = '<div class="empty">Nothing owed. Keep it that way.</div>'; return; }
+  list.innerHTML = db.debts.map(d => {
+    const left = Math.max(0, d.amount - d.paid);
+    const done = left === 0;
+    const pct = d.amount ? Math.min(100, d.paid / d.amount * 100) : 100;
+    return `<div class="item ${done ? 'settled' : ''}">
+      <span class="name">${esc(d.person)}${d.note ? ` <span style="color:var(--faint);font-weight:400">— ${esc(d.note)}</span>` : ''}</span>
+      <span class="mini-bar"><i style="width:${pct}%"></i></span>
+      <span class="meta">${money(d.paid)} of ${money(d.amount)}</span>
+      <span class="amt" style="color:${done ? 'var(--green)' : 'var(--red)'}">${done ? 'settled' : money(left)}</span>
+      ${done ? '' : `<span class="pay">
+        <input type="number" step="0.01" min="0" placeholder="0.00" data-pay-in="${d.id}">
+        <button data-pay="${d.id}">Pay</button>
+      </span>`}
+      <button class="ghost" data-del-debt="${d.id}" title="Remove">&times;</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
+    const input = list.querySelector(`[data-pay-in="${b.dataset.pay}"]`);
+    const amt = parseFloat(input.value);
+    if (!(amt > 0)) return;
+    const d = db.debts.find(x => x.id === b.dataset.pay);
+    d.paid = Math.min(d.amount, d.paid + amt);
+    save(); renderDebts();
+  });
+  list.querySelectorAll('[data-pay-in]').forEach(i => i.onkeydown = e => {
+    if (e.key === 'Enter') list.querySelector(`[data-pay="${i.dataset.payIn}"]`).click();
+  });
+  list.querySelectorAll('[data-del-debt]').forEach(b => b.onclick = () => {
+    db.debts = db.debts.filter(x => x.id !== b.dataset.delDebt);
+    save(); renderDebts();
+  });
+}
+$('#debtAdd').onclick = () => {
+  const person = $('#debtWho').value.trim();
+  const amount = parseFloat($('#debtAmt').value);
+  if (!person || !(amount > 0)) return;
+  db.debts.push({ id: uid(), person, amount, paid: 0, note: $('#debtNote').value.trim() });
+  save(); renderDebts();
+  $('#debtWho').value = $('#debtAmt').value = $('#debtNote').value = '';
+  $('#debtWho').focus();
+};
+
+/* ============================ pomodoro ============================ */
+const LEN = { work: 25 * 60, short: 5 * 60, long: 15 * 60 };
+let mode = 'work', remaining = LEN.work, endAt = null, ticker = null;
+
+function paintClock(){
+  const s = Math.max(0, Math.round(remaining));
+  $('#clock').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  $('#clock').className = 'clock' + (mode === 'work' ? '' : ' rest');
+  document.title = endAt ? `${$('#clock').textContent} · ${mode === 'work' ? 'Focus' : 'Break'}` : 'Control Panel';
+  $('#pomoToggle').textContent = endAt ? 'Pause' : (remaining < LEN[mode] ? 'Resume' : 'Start');
+  $('#pomoDone').textContent = db.pomos.filter(t => dayKey(t) === dayKey(new Date())).length + ' done today';
+}
+function setMode(m){
+  mode = m; stop(); remaining = LEN[m];
+  document.querySelectorAll('.modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  paintClock();
+}
+function stop(){ clearInterval(ticker); ticker = null; endAt = null; }
+function start(){
+  endAt = Date.now() + remaining * 1000;
+  ticker = setInterval(() => {
+    remaining = (endAt - Date.now()) / 1000;
+    if (remaining <= 0){ finish(); return; }
+    paintClock();
+  }, 250);
+  paintClock();
+}
+function finish(){
+  stop();
+  beep();
+  if (mode === 'work'){
+    db.pomos.push(new Date().toISOString());
+    save();
+    const done = db.pomos.filter(t => dayKey(t) === dayKey(new Date())).length;
+    setMode(done % 4 === 0 ? 'long' : 'short');   // long break after every 4th focus block
+  } else {
+    setMode('work');
+  }
+}
+function beep(){
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, .18, .36].forEach(t => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880; o.type = 'sine';
+      g.gain.setValueAtTime(.0001, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(.25, ctx.currentTime + t + .02);
+      g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + t + .15);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + .16);
+    });
+  } catch (e) { /* audio blocked until first interaction — silent is fine */ }
+}
+$('#pomoToggle').onclick = () => endAt ? (stop(), paintClock()) : start();
+$('#pomoReset').onclick = () => setMode(mode);
+document.querySelectorAll('.modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+/* ============================ import / export ============================ */
+$('#exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(db, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'control-panel-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const incoming = JSON.parse(r.result);
+      if (!confirm('Replace all current data with this file?')) return;
+      db = Object.assign({}, blank, incoming);
+      save(); renderAll();
+    } catch (err) { alert('That file is not valid Control Panel JSON.'); }
+  };
+  r.readAsText(f);
+  e.target.value = '';
+};
+
+/* ============================ boot ============================ */
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderAll(){ renderDeadline(); renderApps(); renderSubs(); renderDebts(); paintClock(); }
+
+// Enter submits whichever add-row you are typing in.
+document.querySelectorAll('.row-form').forEach(form => {
+  const btn = form.querySelector('button');
+  form.querySelectorAll('input').forEach(i => i.onkeydown = e => { if (e.key === 'Enter') btn.click(); });
+});
+
+renderAll();
+// Keep day-based counters honest if the tab is left open overnight.
+setInterval(renderAll, 60000);
+</script>
+</body>
+</html>
