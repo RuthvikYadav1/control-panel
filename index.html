@@ -356,6 +356,21 @@ $('#dlSet').onclick = () => {
 };
 
 /* ============================ applications ============================ */
+// Undo history for anything that changes db.apps. Snapshot-based: cheap at this
+// size, and it survives deletes, logs and whole-day clears identically.
+// Memory only — a reload starts you with a clean history.
+const undoStack = [];
+function pushUndo(label){
+  undoStack.push({label, apps: [...db.apps]});
+  if (undoStack.length > 30) undoStack.shift();
+}
+function undoApps(){
+  const step = undoStack.pop();
+  if (!step) return;
+  db.apps = step.apps;
+  save(); renderApps(); renderDeadline();
+}
+
 function renderApps(){
   const now = new Date();
   const today = db.apps.filter(t => dayKey(t) === dayKey(now)).length;
@@ -381,7 +396,10 @@ function renderApps(){
   $('#appLast').textContent = last
     ? 'last: ' + new Date(last).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'})
     : 'no applications logged yet';
-  $('#appUndo').style.visibility = last ? 'visible' : 'hidden';
+  const step = undoStack[undoStack.length - 1];
+  $('#appUndo').textContent = step ? 'undo ' + step.label : 'undo';
+  $('#appUndo').title = step ? `Undo the ${step.label} (Ctrl+Z)` : '';
+  $('#appUndo').style.visibility = step ? 'visible' : 'hidden';
   renderAppLog();
 }
 
@@ -422,6 +440,7 @@ function renderAppLog(){
   box.scrollTop = keepScroll;
 
   box.querySelectorAll('[data-del-app]').forEach(b => b.onclick = () => {
+    pushUndo('delete');
     db.apps.splice(Number(b.dataset.delApp), 1);
     save(); renderApps(); renderDeadline();
   });
@@ -431,19 +450,29 @@ function renderAppLog(){
     const when = labelDay(new Date(hit[0]));
     const day = /^(Today|Yesterday)$/.test(when) ? when.toLowerCase() : 'on ' + when;
     if (!confirm(`Delete all ${hit.length} application${hit.length === 1 ? '' : 's'} logged ${day}?`)) return;
+    pushUndo('clear');
     db.apps = db.apps.filter(t => dayKey(t) !== k);
     save(); renderApps(); renderDeadline();
   });
 }
 $('#appToggleLog').onclick = () => { logOpen = !logOpen; renderAppLog(); };
 $('#appLog').onclick = () => {
+  pushUndo('log');
   db.apps.push(new Date().toISOString());
   save(); renderApps(); renderDeadline();
   const b = $('#appLog'), old = b.textContent;
   b.textContent = '✓ Logged — ' + db.apps.length + ' total';
   setTimeout(() => b.textContent = old, 1100);
 };
-$('#appUndo').onclick = () => { db.apps.pop(); save(); renderApps(); renderDeadline(); };
+$('#appUndo').onclick = undoApps;
+// Ctrl/Cmd+Z undoes the last application change, unless you're typing in a field.
+document.addEventListener('keydown', e => {
+  if (!(e.key === 'z' && (e.ctrlKey || e.metaKey)) || e.shiftKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  if (!undoStack.length) return;
+  e.preventDefault();
+  undoApps();
+});
 
 /* ============================ subscriptions ============================ */
 function renderSubs(){
