@@ -341,60 +341,40 @@
 </div>
 
 <script type="module">
-// Firebase is loaded with a dynamic import (below), not a static one, so that a
+// Supabase is loaded with a dynamic import (below), not a static one, so that a
 // network hiccup fetching it can never take down the rest of the app — someone
-// who hasn't configured Firebase yet should never lose the local-only dashboard
+// who hasn't configured Supabase yet should never lose the local-only dashboard
 // just because a CDN request failed.
-let getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-    signOut, sendPasswordResetEmail;
-let doc, getDoc, setDoc, onSnapshot;
-let auth, firestore;
+let supabase;   // the Supabase client, once initSupabase() resolves
+let realtimeChannel = null;
 
 /* ============================ helpers (needed early) ============================ */
 const $ = s => document.querySelector(s);
 function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-/* ============================ firebase ============================ */
-// Get these six values from: Firebase console → Project settings → General →
-// "Your apps" → the web app (</>) → SDK setup and configuration → Config.
-// This object is not a secret — it's meant to be public. Access to your data
-// is controlled by the Firestore security rules (see README), not by hiding this.
-const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID"
+/* ============================ supabase ============================ */
+// Get these two values from: Supabase project → Settings → API → Project URL
+// and Project API keys → "anon" "public". Neither is a secret — the anon key
+// is meant to be public in client-side code; your data is protected by the
+// Row Level Security policy on the table (see README), not by hiding this.
+const supabaseConfig = {
+  url: "PASTE_YOUR_PROJECT_URL",
+  anonKey: "PASTE_YOUR_ANON_KEY"
 };
-const CONFIGURED = !/PASTE_YOUR/.test(firebaseConfig.apiKey);
+const CONFIGURED = !/PASTE_YOUR/.test(supabaseConfig.url);
 
-async function initFirebase(){
-  const [appMod, authMod, fsMod] = await Promise.all([
-    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js"),
-    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js")
-  ]);
-  ({ getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-     signOut, sendPasswordResetEmail } = authMod);
-  ({ doc, getDoc, setDoc, onSnapshot } = fsMod);
-
-  const fbApp = appMod.initializeApp(firebaseConfig);
-  auth = getAuth(fbApp);
-  firestore = fsMod.getFirestore(fbApp);
-  fsMod.enableIndexedDbPersistence(firestore).catch(() => {
-    // another tab already holds the offline-cache lock — the app still works
-    // fine over the network, it just won't also cache locally in this tab.
-  });
+async function initSupabase(){
+  const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm");
+  supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
 }
 
 if (!CONFIGURED){
   $('#authGate').innerHTML = `<div class="card auth-card">
     <div class="eyebrow">Setup needed</div>
-    <h1>Firebase isn't configured yet</h1>
-    <p>Open <code>index.html</code>, find the <code>firebaseConfig</code> object near the top of the
-      script, and paste in your project's values. See the README for the exact steps. Until then this
-      dashboard keeps working exactly as before, saved to this browser only.</p>
+    <h1>Supabase isn't configured yet</h1>
+    <p>Open <code>index.html</code>, find the <code>supabaseConfig</code> object near the top of the
+      script, and paste in your project's URL and anon key. See the README for the exact steps. Until
+      then this dashboard keeps working exactly as before, saved to this browser only.</p>
   </div>`;
 }
 
@@ -426,9 +406,9 @@ function flashSync(text, isError){
 const save = () => {
   if (CONFIGURED){
     if (!currentUser) return;   // dashboard is hidden while signed out, so this shouldn't fire
-    setDoc(doc(firestore, 'users', currentUser.uid), db)
-      .then(() => flashSync('Saved'))
-      .catch(() => flashSync('⚠ Sync failed — check your connection', true));
+    supabase.from('user_data')
+      .upsert({ user_id: currentUser.id, data: db, updated_at: new Date().toISOString() })
+      .then(({ error }) => flashSync(error ? '⚠ Sync failed — check your connection' : 'Saved', !!error));
   } else {
     localStorage.setItem(KEY, JSON.stringify(db));
   }
@@ -863,29 +843,33 @@ $('#importFile').onchange = e => {
 };
 
 /* ============================ auth ============================ */
-let authMode = 'signin';
+let authMode = 'signin';       // 'signin' | 'signup' | 'recovery'
 function setAuthError(msg){
   const el = $('#authError');
   el.textContent = msg; el.hidden = !msg;
 }
-function friendlyAuthError(code){
-  return ({
-    'auth/invalid-email': 'Enter a valid email address.',
-    'auth/user-not-found': 'No account with that email — try "Sign up" instead.',
-    'auth/wrong-password': 'Incorrect password.',
-    'auth/invalid-credential': 'Incorrect email or password.',
-    'auth/email-already-in-use': 'That email already has an account — try signing in instead.',
-    'auth/weak-password': 'Password must be at least 6 characters.',
-    'auth/too-many-requests': 'Too many attempts — wait a bit and try again.',
-    'auth/network-request-failed': 'Network error — check your connection.',
-    'auth/invalid-api-key': "Firebase config looks wrong — double check the values pasted into index.html.",
-    'auth/api-key-not-valid.-please-pass-a-valid-api-key.': "Firebase config looks wrong — double check the values pasted into index.html.",
-    'auth/configuration-not-found': "Email/Password sign-in isn't turned on for this project yet — enable it under Authentication → Sign-in method in the Firebase console."
-  })[code] || 'Something went wrong. Please try again.';
+// Supabase doesn't give stable error codes like Firebase — it gives a message
+// string. Its own messages are already fairly readable, so only the common
+// ones get a rewrite; anything else falls through to Supabase's own text.
+function friendlyAuthError(message){
+  const m = message || '';
+  if (/invalid login credentials/i.test(m)) return 'Incorrect email or password.';
+  if (/user already registered/i.test(m)) return 'That email already has an account — try signing in instead.';
+  if (/password should be at least/i.test(m)) return 'Password must be at least 6 characters.';
+  if (/unable to validate email/i.test(m)) return 'Enter a valid email address.';
+  if (/email not confirmed/i.test(m)) return 'Confirm your email first — check your inbox for the confirmation link, or turn off "Confirm email" in Supabase (see README).';
+  if (/rate limit/i.test(m)) return 'Too many attempts — wait a bit and try again.';
+  if (/fetch/i.test(m) || /network/i.test(m)) return 'Network error — check your connection.';
+  if (/invalid api key/i.test(m) || /project not specified/i.test(m)) return 'Supabase config looks wrong — double check the values pasted into index.html.';
+  return m || 'Something went wrong. Please try again.';
 }
 function applyAuthMode(){
-  $('#authSubmit').textContent = authMode === 'signin' ? 'Sign In' : 'Create Account';
+  const labels = { signin: 'Sign In', signup: 'Create Account', recovery: 'Set New Password' };
+  $('#authSubmit').textContent = labels[authMode];
+  $('#authToggleMode').hidden = authMode === 'recovery';
   $('#authToggleMode').textContent = authMode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in';
+  $('#authForgot').hidden = authMode === 'recovery';
+  $('#authPassword').placeholder = authMode === 'recovery' ? 'new password (6+ characters)' : 'password (6+ characters)';
   setAuthError('');
 }
 
@@ -894,34 +878,60 @@ function wireAuthUI(){
   $('#authForgot').onclick = async () => {
     const email = $('#authEmail').value.trim();
     if (!email){ setAuthError('Enter your email above first, then click "Forgot password?" again.'); return; }
-    try { await sendPasswordResetEmail(auth, email); setAuthError('Password reset email sent — check your inbox.'); }
-    catch (err){ setAuthError(friendlyAuthError(err.code)); }
+    try {
+      await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+      setAuthError('Password reset email sent — check your inbox.');
+    } catch (err){ setAuthError(friendlyAuthError(err.message)); }
   };
   $('#authSubmit').onclick = async () => {
     const email = $('#authEmail').value.trim();
     const password = $('#authPassword').value;
+    if (authMode === 'recovery'){
+      if (password.length < 6){ setAuthError('Password must be at least 6 characters.'); return; }
+      $('#authSubmit').disabled = true;
+      const { error } = await supabase.auth.updateUser({ password });
+      $('#authSubmit').disabled = false;
+      if (error){ setAuthError(friendlyAuthError(error.message)); return; }
+      authMode = 'signin';
+      applyAuthMode();
+      // The recovery link already left us signed in — open straight into the
+      // dashboard rather than waiting on another auth event that may not fire.
+      const { data: { session } } = await supabase.auth.getSession();
+      handleAuthState(session?.user ?? null).catch(err => flashSync('⚠ ' + err.message, true));
+      return;
+    }
     if (!email || !password){ setAuthError('Enter both an email and a password.'); return; }
     if (authMode === 'signup' && password.length < 6){ setAuthError('Password must be at least 6 characters.'); return; }
     $('#authSubmit').disabled = true;
     setAuthError('');
     try {
-      if (authMode === 'signin') await signInWithEmailAndPassword(auth, email, password);
-      else await createUserWithEmailAndPassword(auth, email, password);
+      if (authMode === 'signin'){
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data.user && !data.session){
+          // "Confirm email" is on for this project — there's no session yet.
+          setAuthError('Account created. Check your email to confirm it, then sign in.');
+          authMode = 'signin';
+          applyAuthMode();
+        }
+      }
     } catch (err){
-      setAuthError(friendlyAuthError(err.code));
+      setAuthError(friendlyAuthError(err.message));
     } finally {
       $('#authSubmit').disabled = false;
     }
   };
   ['#authEmail', '#authPassword'].forEach(sel => $(sel).addEventListener('keydown', e => { if (e.key === 'Enter') $('#authSubmit').click(); }));
-  $('#signOutBtn').onclick = () => signOut(auth);
+  $('#signOutBtn').onclick = () => supabase.auth.signOut();
   applyAuthMode();
 }
 
-let unsubscribeSnapshot = null;
 async function handleAuthState(user){
   currentUser = user;
-  if (unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+  if (realtimeChannel){ supabase.removeChannel(realtimeChannel); realtimeChannel = null; }
 
   if (!user){
     $('#authGate').hidden = false;
@@ -936,10 +946,9 @@ async function handleAuthState(user){
   $('#acctEmail').hidden = false;
   $('#signOutBtn').hidden = false;
 
-  const ref = doc(firestore, 'users', user.uid);
-  const snap = await getDoc(ref);
+  const { data: row } = await supabase.from('user_data').select('data').eq('user_id', user.id).maybeSingle();
 
-  if (!snap.exists()){
+  if (!row){
     // First sign-in on this account — offer to bring in whatever this browser
     // already had saved locally (e.g. from before cloud sync was set up).
     let local = {};
@@ -950,15 +959,25 @@ async function handleAuthState(user){
     const initial = hasLocalData && confirm('Import the data already saved in this browser into your account?')
       ? local
       : Object.assign({}, blank);
-    await setDoc(ref, initial);
+    await supabase.from('user_data').insert({ user_id: user.id, data: initial });
+    db = initial;
+  } else {
+    db = Object.assign({}, blank, row.data);
   }
+  db.apps = normalizeApps(db.apps);
+  renderAll();
 
-  unsubscribeSnapshot = onSnapshot(ref, s => {
-    if (!s.exists()) return;
-    db = Object.assign({}, blank, s.data());
-    db.apps = normalizeApps(db.apps);
-    renderAll();
-  }, () => flashSync('⚠ Lost the live connection — reconnecting…', true));
+  realtimeChannel = supabase
+    .channel('user_data_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'user_data', filter: `user_id=eq.${user.id}` },
+      payload => {
+        if (!payload.new || !payload.new.data) return;
+        db = Object.assign({}, blank, payload.new.data);
+        db.apps = normalizeApps(db.apps);
+        renderAll();
+      })
+    .subscribe();
 
   $('#authGate').hidden = true;
   $('#dashboard').hidden = false;
@@ -974,18 +993,29 @@ document.querySelectorAll('.row-form').forEach(form => {
 });
 
 if (CONFIGURED){
-  initFirebase()
+  initSupabase()
     .then(() => {
       wireAuthUI();
-      onAuthStateChanged(auth, u => handleAuthState(u).catch(err => flashSync('⚠ ' + err.message, true)));
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY'){
+          authMode = 'recovery';
+          applyAuthMode();
+          $('#authGate').hidden = false;
+          $('#dashboard').hidden = true;
+          return;
+        }
+        if (authMode !== 'recovery'){
+          handleAuthState(session?.user ?? null).catch(err => flashSync('⚠ ' + err.message, true));
+        }
+      });
     })
     .catch(() => {
-      // The Firebase SDK itself failed to load (offline, or the CDN is blocked) —
+      // The Supabase SDK itself failed to load (offline, or the CDN is blocked) —
       // say so plainly rather than leaving a sign-in form that can never work.
       $('#authGate').innerHTML = `<div class="card auth-card">
-        <div class="eyebrow">Can't reach Firebase</div>
+        <div class="eyebrow">Can't reach Supabase</div>
         <h1>No connection to the cloud</h1>
-        <p>This needs a network connection to <code>gstatic.com</code> to sign in and sync.
+        <p>This needs a network connection to <code>cdn.jsdelivr.net</code> to sign in and sync.
           Check your connection and reload the page.</p>
       </div>`;
     });

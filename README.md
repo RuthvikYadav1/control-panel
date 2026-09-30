@@ -14,38 +14,39 @@ A single-file personal dashboard. Open `index.html` in a browser — no build st
 
 **Out of the box** — before you've done the setup below — everything is saved to your browser's `localStorage`. Nothing is uploaded, the data lives in one browser on one machine, and clearing site data erases it. Use **Export** in the header to save a dated JSON backup, and **Import** to restore it or carry it to another machine.
 
-**After the setup below** — your data instead lives in a free cloud database (Firebase/Firestore), behind your own sign-in. It syncs automatically to every device where you sign in with the same account, survives clearing your browser's data, and Export/Import still work as a manual backup on top of that.
+**After the setup below** — your data instead lives in a free cloud database (Supabase), behind your own sign-in. It syncs automatically — live, not just on refresh — to every device where you sign in with the same account, survives clearing your browser's data, and Export/Import still work as a manual backup on top of that.
 
 ## Cloud sync setup (optional, ~10 minutes)
 
-This step is entirely yours to do — it needs your own Google account, and I (Claude) never sign into it on your behalf. Everything below happens at [console.firebase.google.com](https://console.firebase.google.com).
+This step is entirely yours to do — it needs your own account, and I (Claude) never sign into it on your behalf. Everything below happens at [supabase.com](https://supabase.com) (free, no credit card required).
 
-1. **Create a project.** Click "Add project", give it any name, and you can skip Google Analytics — it's not needed here. The free "Spark" plan covers this app comfortably.
-2. **Register a web app.** On the project's Overview page, click the `</>` (web) icon. Give it a nickname (anything). You do **not** need Firebase Hosting — skip that checkbox.
-3. **Copy the config.** After registering, Firebase shows a `firebaseConfig = { apiKey: "...", ... }` snippet. Copy those six values.
-4. **Paste them into `index.html`.** Near the top of the `<script type="module">` block, find:
+1. **Create a project.** Sign up, then "New project" — give it any name and a database password (Supabase asks for one; you won't need it day-to-day, just save it somewhere). Pick any region.
+2. **Copy the API config.** Once the project finishes provisioning: Settings (gear icon) → API. Copy the **Project URL** and the **`anon` `public`** key (not the `service_role` key — that one must never appear in client-side code).
+3. **Paste them into `index.html`.** Near the top of the `<script type="module">` block, find:
    ```js
-   const firebaseConfig = {
-     apiKey: "PASTE_YOUR_API_KEY",
-     ...
+   const supabaseConfig = {
+     url: "PASTE_YOUR_PROJECT_URL",
+     anonKey: "PASTE_YOUR_ANON_KEY"
    };
    ```
-   Replace each `PASTE_YOUR_...` placeholder with your real value. This config is not a secret — it's meant to be public in client-side code; your data itself is protected by the rule in step 6, not by hiding this.
-5. **Turn on Email/Password sign-in.** In the left sidebar: Build → Authentication → Get started → Sign-in method → Email/Password → enable it → Save.
-6. **Create the database and lock it down.** Left sidebar: Build → Firestore Database → Create database → any region → start in production mode. Once created, open the **Rules** tab and replace the contents with:
+   Replace both placeholders with your real values. Neither is a secret — the anon key is meant to be public in client-side code; your data itself is protected by the policy in step 5, not by hiding this.
+4. **Turn off "Confirm email"** (recommended for a personal tool). Authentication → Providers → Email → toggle off "Confirm email" → Save. Without this, signing up sends a confirmation email and you can't sign in until you click the link in it — extra friction with no real benefit for an account only you will ever use.
+5. **Create the table and lock it down.** Left sidebar → SQL Editor → New query → paste this in and run it:
+   ```sql
+   create table user_data (
+     user_id uuid primary key references auth.users(id) on delete cascade,
+     data jsonb not null default '{}'::jsonb,
+     updated_at timestamptz not null default now()
+   );
+   alter table user_data enable row level security;
+   create policy "read own data" on user_data for select using (auth.uid() = user_id);
+   create policy "insert own data" on user_data for insert with check (auth.uid() = user_id);
+   create policy "update own data" on user_data for update using (auth.uid() = user_id);
+   alter publication supabase_realtime add table user_data;
    ```
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{database}/documents {
-       match /users/{uid} {
-         allow read, write: if request.auth != null && request.auth.uid == uid;
-       }
-     }
-   }
-   ```
-   Click **Publish**. This is what actually protects your data — it means a signed-in account can only ever read or write its own document, never anyone else's, regardless of who else signs up.
-7. **Push the updated `index.html`** (with your real config) to GitHub, or just open the file locally to test first.
+   The three `create policy` lines are what actually protect your data — they mean a signed-in account can only ever read or write its own row, never anyone else's, regardless of who else signs up. The last line turns on live sync, so a change on one device shows up on another without a refresh.
+6. **Push the updated `index.html`** (with your real config) to GitHub, or just open the file locally to test first.
 
-Once that's done, the site shows a sign-in screen. Create an account with any email and password (6+ characters) — it doesn't need to be a real, verifiable email address, since there's no verification step. The first time you sign in, if this browser already had data saved locally, you'll be asked whether to import it into your new account.
+Once that's done, the site shows a sign-in screen. Create an account with any email and password (6+ characters). The first time you sign in, if this browser already had data saved locally, you'll be asked whether to import it into your new account.
 
 If you skip all of this, the file keeps working exactly as it does today — local-only, no sign-in — until you fill in the config.
