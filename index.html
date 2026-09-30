@@ -341,14 +341,14 @@
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
-import {
-  getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut, sendPasswordResetEmail
-} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, onSnapshot, enableIndexedDbPersistence
-} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+// Firebase is loaded with a dynamic import (below), not a static one, so that a
+// network hiccup fetching it can never take down the rest of the app — someone
+// who hasn't configured Firebase yet should never lose the local-only dashboard
+// just because a CDN request failed.
+let getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+    signOut, sendPasswordResetEmail;
+let doc, getDoc, setDoc, onSnapshot;
+let auth, firestore;
 
 /* ============================ helpers (needed early) ============================ */
 const $ = s => document.querySelector(s);
@@ -369,16 +369,26 @@ const firebaseConfig = {
 };
 const CONFIGURED = !/PASTE_YOUR/.test(firebaseConfig.apiKey);
 
-let auth, firestore;
-if (CONFIGURED){
-  const fbApp = initializeApp(firebaseConfig);
+async function initFirebase(){
+  const [appMod, authMod, fsMod] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js"),
+    import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js")
+  ]);
+  ({ getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+     signOut, sendPasswordResetEmail } = authMod);
+  ({ doc, getDoc, setDoc, onSnapshot } = fsMod);
+
+  const fbApp = appMod.initializeApp(firebaseConfig);
   auth = getAuth(fbApp);
-  firestore = getFirestore(fbApp);
-  enableIndexedDbPersistence(firestore).catch(() => {
+  firestore = fsMod.getFirestore(fbApp);
+  fsMod.enableIndexedDbPersistence(firestore).catch(() => {
     // another tab already holds the offline-cache lock — the app still works
     // fine over the network, it just won't also cache locally in this tab.
   });
-} else {
+}
+
+if (!CONFIGURED){
   $('#authGate').innerHTML = `<div class="card auth-card">
     <div class="eyebrow">Setup needed</div>
     <h1>Firebase isn't configured yet</h1>
@@ -879,7 +889,7 @@ function applyAuthMode(){
   setAuthError('');
 }
 
-if (CONFIGURED){
+function wireAuthUI(){
   $('#authToggleMode').onclick = () => { authMode = authMode === 'signin' ? 'signup' : 'signin'; applyAuthMode(); };
   $('#authForgot').onclick = async () => {
     const email = $('#authEmail').value.trim();
@@ -964,7 +974,21 @@ document.querySelectorAll('.row-form').forEach(form => {
 });
 
 if (CONFIGURED){
-  onAuthStateChanged(auth, u => handleAuthState(u).catch(err => flashSync('⚠ ' + err.message, true)));
+  initFirebase()
+    .then(() => {
+      wireAuthUI();
+      onAuthStateChanged(auth, u => handleAuthState(u).catch(err => flashSync('⚠ ' + err.message, true)));
+    })
+    .catch(() => {
+      // The Firebase SDK itself failed to load (offline, or the CDN is blocked) —
+      // say so plainly rather than leaving a sign-in form that can never work.
+      $('#authGate').innerHTML = `<div class="card auth-card">
+        <div class="eyebrow">Can't reach Firebase</div>
+        <h1>No connection to the cloud</h1>
+        <p>This needs a network connection to <code>gstatic.com</code> to sign in and sync.
+          Check your connection and reload the page.</p>
+      </div>`;
+    });
 } else {
   $('#authGate').hidden = true;
   $('#dashboard').hidden = false;
